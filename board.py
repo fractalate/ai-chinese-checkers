@@ -1,4 +1,4 @@
-from typing import Sequence, Tuple
+from typing import List, Tuple
 
 BOARD = '''
     A
@@ -47,7 +47,7 @@ def xy_to_cell(x: int, y: int) -> int:
 def cell_to_xy(cell: int) -> Tuple[int, int]:
     return CELL_TO_XY[cell]
 
-def list_xy_around(x: int, y: int, size: int) -> Sequence[Tuple[int, int]]:
+def list_xy_around(x: int, y: int, size: int) -> List[Tuple[int, int]]:
     if size == 0:
         return []
 
@@ -89,3 +89,34 @@ def test_list_xy_around():
     out = '\n'.join([''.join(x) for x in board])
     print(out)
     print(len(list_xy_around(xx, yy, 3)))
+
+EMPTY = 0
+FRIENDLY = 1
+ENEMY = 2
+
+def new_board_state() -> List[int]:
+    result = [EMPTY] * 121
+    for x, y in A_CELLS:
+        cell = xy_to_cell(x, y)
+        result[cell] = FRIENDLY
+    for x, y in D_CELLS:
+        cell = xy_to_cell(x, y)
+        result[cell] = ENEMY
+    return result
+
+def flip_board_state(state: List[int]) -> List[int]:
+    return list(reversed([EMPTY if x == EMPTY else FRIENDLY if x == ENEMY else ENEMY for x in state]))
+
+def print_board(state: List[int]):
+    for y in range(BOARD_MAX_DIM):
+        for x in range(BOARD_MAX_DIM):
+            cell = xy_to_cell(x, y)
+            if cell == CELL_OOB:
+                print(' ', end='')
+            elif state[cell] == FRIENDLY:
+                print('X', end='')
+            elif state[cell] == ENEMY:
+                print('O', end='')
+            else:
+                print('.', end='')
+        print()

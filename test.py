@@ -49,20 +49,20 @@ def calculate_input_neurons(l: int) -> int:
 def board_state_to_input_vector(state: List[int], backtracking_cells: List[int] = []) -> List[int]:
     result = []
     # board state
-    result += [1.0 if p == game.FRIENDLY else 0.0 for p in state]
-    result += [1.0 if p == game.ENEMY else 0.0 for p in state]
+    result += [1.0 if p == board.FRIENDLY else 0.0 for p in state]
+    result += [1.0 if p == board.ENEMY else 0.0 for p in state]
     result += [1.0 if cell in backtracking_cells else 0.0 for cell in range(len(state))]
     # local-to-piece state
     for cell, pawn in enumerate(state):
-        if pawn != game.FRIENDLY and pawn != game.ENEMY:
+        if pawn != board.FRIENDLY and pawn != board.ENEMY:
             continue
         x, y = board.cell_to_xy(cell)
         for adj_x, adj_y in board.list_xy_around(x, y, L):
             adj_cell = board.xy_to_cell(adj_x, adj_y)
             adj_pawn = state[adj_cell] if adj_cell != board.CELL_OOB else -1
             result += [
-                1.0 if adj_pawn == game.FRIENDLY else 0.0,
-                1.0 if adj_pawn == game.ENEMY else 0.0,
+                1.0 if adj_pawn == board.FRIENDLY else 0.0,
+                1.0 if adj_pawn == board.ENEMY else 0.0,
                 1.0 if adj_cell == board.CELL_OOB else 0.0,
                 1.0 if adj_cell in backtracking_cells else 0.0,
             ]
@@ -70,10 +70,31 @@ def board_state_to_input_vector(state: List[int], backtracking_cells: List[int] 
     return torch.tensor(result)
 
 def is_valid_move(state: List[int], from_cell: int, to_cell: int) -> bool:
-    return True # todo
+    fx, fy = board.cell_to_xy(from_cell)
+    tx, ty = board.cell_to_xy(to_cell)
+    if state[from_cell] != board.FRIENDLY:
+        return False
+    arounds_delta = board.list_xy_around(0, 0, 1)
+    arounds_delta2 = [(x*2, y*2) for (x, y) in arounds_delta]
+    if (tx-fx, ty-fy) in arounds_delta:
+        if state[to_cell] in [board.FRIENDLY, board.ENEMY]:
+            return False
+        return True
+    elif (tx-fx, ty-fy) in arounds_delta2:
+        i = arounds_delta2.index((tx-fx, ty-fy))
+        dhx, dhy = arounds_delta[i]
+        hx, hy = fx+dhx, fy+dhy
+        hcell = board.xy_to_cell(hx, hy)
+        assert hcell >= 0 and hcell < 121
+        if state[hcell] not in [board.FRIENDLY, board.ENEMY]:
+            return False
+        if state[to_cell] in [board.FRIENDLY, board.ENEMY]:
+            return False
+        return True
+    return False
 
 def is_valid_no_action(state: List[int]) -> bool:
-    return True # todo
+    return False # todo - only possible to do nothing when in a multi-hop
 
 def choose_best_action(state: List[int], outputs):
     # otherwise we have to check whether some moves are valid
@@ -93,6 +114,7 @@ def choose_best_action(state: List[int], outputs):
                 if is_valid_move(state, from_cell, to_cell):
                     best_action = (from_cell, to_cell)
                     best_action_score = score
+    assert best_action_score > -100.0 # todo is it possible for these scores to dip real low, like lower than this?
     # todo - this has to be amended to be recursive so we can do multi-hops
     return best_action
 
@@ -102,32 +124,31 @@ H = 100_000 # how big is too big?
 M = 121*121 + 1
 print(f'{L=} {N=} {H=} {M=}')
 
-model = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
-
-state = game.new_board_state()
-inputs = board_state_to_input_vector(state)
-outputs = model(inputs)
-
-best_action = choose_best_action(state, outputs)
-if best_action is None:
-    print('Best Action: Do Nothing')
-else:
-    fc, tc = best_action
-    fx, fy = board.cell_to_xy(fc)
-    tx, ty = board.cell_to_xy(tc)
-    print(f'Best Action: ({fx}, {fy}) to ({tx}, {ty})')
-
-'''
+model1 = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
 model2 = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
 
-# Example input data
-X = torch.randn(5, N)  # 5 samples with N features each
+state = board.new_board_state()
 
-# Generate outputs
-outputs = model(X)
-print('Outputs:', outputs)
-outputs = model(X)
-print('Outputs:', outputs)
-outputs = model2(X)
-print('Outputs:', outputs)
-'''
+for i in range(100):
+    model = model1
+
+    inputs = board_state_to_input_vector(state)
+    outputs = model(inputs)
+
+    best_action = choose_best_action(state, outputs)
+    if best_action is None:
+        print()
+        print('Best Action: Do Nothing')
+    else:
+        fc, tc = best_action
+        fx, fy = board.cell_to_xy(fc)
+        tx, ty = board.cell_to_xy(tc)
+        print()
+        print(f'Best Action: ({fx}, {fy}) to ({tx}, {ty})')
+
+        state[tc] = state[fc]
+        state[fc] = board.EMPTY
+
+    board.print_board(state if i % 2 == 0 else board.flip_board_state(state))
+    state = board.flip_board_state(state)
+    model1, model2 = model2, model1
