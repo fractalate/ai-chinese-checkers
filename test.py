@@ -16,9 +16,28 @@ class NeuralNetwork(nn.Module):
         x = self.fc2(x)
         return x
 
-N = 10_000 # maybe something like this
+# l is size of neighborhood around pieces to consider
+def calculate_input_neurons(l: int) -> int:
+    # For each of the 121 cells on the board:
+    # - one input if cell is friendly
+    # - one input if cell is enemy
+    # For each of the 20 pieces in a 2 player game:
+    #   For each of the COUNT cells around each piece
+    #   - one input if cell is friendly
+    #   - one input if cell is enemy
+    #   - one input if cell is impassible
+    #   - one input if cell is backtracking
+    COUNT = len(board.list_xy_around(0, 0, l))
+    return 121 * 2 + 20 * COUNT * 4
+
+N = calculate_input_neurons(6) # is this too big?
 H = 100_000 # how big is too big?
 M = 121*121 + 1
+
+print(f'{N=} {H=} {M=}')
+
+import sys
+sys.exit()
 
 model = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
 

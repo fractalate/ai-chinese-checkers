@@ -25,6 +25,8 @@ CELL_COUNT = 121
 CELL_OOB = -1
 XY_TO_CELL = [CELL_OOB] * BOARD_MAX_DIM * BOARD_MAX_DIM
 CELL_TO_XY = [()] * CELL_COUNT
+A_CELLS = []
+D_CELLS = []
 
 cell_no = 0
 for y, row in enumerate(BOARD.split('\n')[1:]):
@@ -33,6 +35,8 @@ for y, row in enumerate(BOARD.split('\n')[1:]):
             CELL_TO_XY[cell_no] = (x, y)
             XY_TO_CELL[y * BOARD_MAX_DIM + x] = cell_no
             cell_no += 1
+        if ch == 'A': A_CELLS.append((x, y))
+        if ch == 'D': D_CELLS.append((x, y))
 del cell_no
 
 def xy_to_cell(x: int, y: int) -> int:
