@@ -3,3 +3,11 @@ XX
 X X
  XX
 '''
+
+MOVE_PATTERN_2 = '''
+XXX
+XXXX
+XX XX
+ XXXX
+  XXX
+'''
