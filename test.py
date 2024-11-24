@@ -46,21 +46,6 @@ def calculate_input_neurons(l: int) -> int:
     COUNT = len(board.list_xy_around(0, 0, l))
     return 121 * 3 + 4 * 20 * COUNT
 
-L = 6 # is this too big?
-N = calculate_input_neurons(L)
-H = 100_000 # how big is too big?
-M = 121*121 + 1
-
-print(f'{L=} {N=} {H=} {M=}')
-
-#model = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
-#torch.save(model, 'testout.model') # about 9 GB
-
-#for i in range(121):
-#    print(board.cell_to_xy(i))
-
-state = game.new_board_state()
-
 def board_state_to_input_vector(state: List[int], backtracking_cells: List[int] = []) -> List[int]:
     result = []
     # board state
@@ -82,9 +67,55 @@ def board_state_to_input_vector(state: List[int], backtracking_cells: List[int] 
                 1.0 if adj_cell in backtracking_cells else 0.0,
             ]
     assert len(result) == N
-    return result
+    return torch.tensor(result)
 
-board_state_to_input_vector(state)
+def is_valid_move(state: List[int], from_cell: int, to_cell: int) -> bool:
+    return True # todo
+
+def is_valid_no_action(state: List[int]) -> bool:
+    return True # todo
+
+def choose_best_action(state: List[int], outputs):
+    # otherwise we have to check whether some moves are valid
+    best_action_score = -100.0
+    best_action = None
+    for out, action in enumerate(outputs):
+        score = action.item()
+        from_cell = out % 121
+        to_cell = (out // 121)
+        if to_cell == 121: # no action case
+            if score > best_action_score:
+                if is_valid_no_action(state):
+                    best_action = None
+                    best_action_score = score
+        else:
+            if score > best_action_score:
+                if is_valid_move(state, from_cell, to_cell):
+                    best_action = (from_cell, to_cell)
+                    best_action_score = score
+    # todo - this has to be amended to be recursive so we can do multi-hops
+    return best_action
+
+L = 6 # is this too big?
+N = calculate_input_neurons(L)
+H = 100_000 # how big is too big?
+M = 121*121 + 1
+print(f'{L=} {N=} {H=} {M=}')
+
+model = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
+
+state = game.new_board_state()
+inputs = board_state_to_input_vector(state)
+outputs = model(inputs)
+
+best_action = choose_best_action(state, outputs)
+if best_action is None:
+    print('Best Action: Do Nothing')
+else:
+    fc, tc = best_action
+    fx, fy = board.cell_to_xy(fc)
+    tx, ty = board.cell_to_xy(tc)
+    print(f'Best Action: ({fx}, {fy}) to ({tx}, {ty})')
 
 '''
 model2 = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
