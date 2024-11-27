@@ -93,6 +93,21 @@ def is_valid_move(state: List[int], from_cell: int, to_cell: int) -> bool:
         return True
     return False
 
+def is_game_won_by_friendly(state: List[int]) -> bool:
+    count_filled = 0
+    has_friendly_pawn = False
+    for (x, y) in board.D_CELLS:
+        cell = board.xy_to_cell(x, y)
+        if state[cell] == board.FRIENDLY:
+            has_friendly_pawn = True
+        if state[cell] != board.EMPTY:
+            count_filled += 1
+    return has_friendly_pawn and len(board.D_CELLS) == count_filled
+
+def is_game_lost_by_friendly(state: List[int]) -> bool:
+    state = board.flip_board_state(state)
+    return is_game_won_by_friendly(state)
+
 def is_valid_no_action(state: List[int]) -> bool:
     return False # todo - only possible to do nothing when in a multi-hop
 
@@ -124,31 +139,88 @@ H = 100_000 # how big is too big?
 M = 121*121 + 1
 print(f'{L=} {N=} {H=} {M=}')
 
-model1 = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
-model2 = NeuralNetwork(input_size=N, output_size=M, hidden_size=H)
+class Player:
+    def __init__(self, model, name):
+        self.model = model
+        self.name = name
+        self.moves = 0
+        self.winner = False
+        self.loser = False
+
+    def score(self, state: List[int]) -> float:
+        total = 0.0
+        if self.winner:
+            total += 1000.0
+        if self.loser:
+            total -= 1000.0
+        for cell, pawn in enumerate(state):
+            x, y = board.cell_to_xy(cell)
+            if pawn == board.FRIENDLY:
+                total += y
+            if cell in board.D_CELLS:
+                total += 10.0
+        return total
+
+player1 = Player(
+    model=NeuralNetwork(input_size=N, output_size=M, hidden_size=H),
+    name='Player 1',
+)
+
+player2 = Player(
+    model=NeuralNetwork(input_size=N, output_size=M, hidden_size=H),
+    name='Player 2',
+)
 
 state = board.new_board_state()
+winner = None
 
-for i in range(100):
-    model = model1
+for i in range(30):
+    if is_game_won_by_friendly(state):
+        winner = player1
+        player1.winner = True
+        player2.loser = True
+        break
+
+    xplayer = player1 if i % 2 == 0 else player2
+    oplayer = player2 if i % 2 == 0 else player1
 
     inputs = board_state_to_input_vector(state)
-    outputs = model(inputs)
+    outputs = player1.model(inputs)
+
+    print()
+    print(f'X - {xplayer.name}')
+    print(f'O - {oplayer.name}')
 
     best_action = choose_best_action(state, outputs)
     if best_action is None:
-        print()
         print('Best Action: Do Nothing')
     else:
         fc, tc = best_action
         fx, fy = board.cell_to_xy(fc)
         tx, ty = board.cell_to_xy(tc)
-        print()
         print(f'Best Action: ({fx}, {fy}) to ({tx}, {ty})')
 
         state[tc] = state[fc]
         state[fc] = board.EMPTY
+        player1.moves += 1
+
+    if is_game_won_by_friendly(state):
+        winner = player1
+        player1.winner = True
+        player2.loser = True
+        break
 
     board.print_board(state if i % 2 == 0 else board.flip_board_state(state))
     state = board.flip_board_state(state)
-    model1, model2 = model2, model1
+    player1, player2 = player2, player1
+
+if winner is None:
+    print('The only way to win is to not play the game. These models did not "play". (Draw)')
+else:
+    print(f'Winner: {winner}!')
+
+p1 = player1.score(state)
+p2 = player2.score(board.flip_board_state(state))
+
+print(f'{player1.name} - Score: {p1}')
+print(f'{player2.name} - Score: {p2}')
