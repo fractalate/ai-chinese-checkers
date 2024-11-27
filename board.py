@@ -22,11 +22,15 @@ FFFF.....BBBB
 
 BOARD_MAX_DIM = 17
 CELL_COUNT = 121
+
 CELL_OOB = -1
+CELL_TO_XY = [(0, 0)] * CELL_COUNT
 XY_TO_CELL = [CELL_OOB] * BOARD_MAX_DIM * BOARD_MAX_DIM
-CELL_TO_XY = [()] * CELL_COUNT
+
 A_CELLS = []
 D_CELLS = []
+
+NOBODY = 0
 
 cell_no = 0
 for y, row in enumerate(BOARD.split('\n')[1:]):
@@ -80,6 +84,7 @@ def list_xy_around(x: int, y: int, size: int) -> List[Tuple[int, int]]:
 
     return result
 
+"""
 def test_list_xy_around():
     xx, yy = 8, 8
     board = [['.'] * 17 for _ in range(17)]
@@ -89,34 +94,58 @@ def test_list_xy_around():
     out = '\n'.join([''.join(x) for x in board])
     print(out)
     print(len(list_xy_around(xx, yy, 3)))
+"""
 
-EMPTY = 0
-FRIENDLY = 1
-ENEMY = 2
+class Board:
+    def __init__(self):
+        self.cells: List[int] = [NOBODY] * CELL_COUNT
 
-def new_board_state() -> List[int]:
-    result = [EMPTY] * 121
-    for x, y in A_CELLS:
-        cell = xy_to_cell(x, y)
-        result[cell] = FRIENDLY
-    for x, y in D_CELLS:
-        cell = xy_to_cell(x, y)
-        result[cell] = ENEMY
-    return result
+    def setup_player(self, player: int):
+        pass # TODO
 
-def flip_board_state(state: List[int]) -> List[int]:
-    return list(reversed([EMPTY if x == EMPTY else FRIENDLY if x == ENEMY else ENEMY for x in state]))
+    def place_pawn(self, player: int, cell: int):
+        self.cells[cell] = player
 
-def print_board(state: List[int]):
-    for y in range(BOARD_MAX_DIM):
-        for x in range(BOARD_MAX_DIM):
-            cell = xy_to_cell(x, y)
-            if cell == CELL_OOB:
-                print(' ', end='')
-            elif state[cell] == FRIENDLY:
-                print('X', end='')
-            elif state[cell] == ENEMY:
-                print('O', end='')
-            else:
-                print('.', end='')
-        print()
+    def clear_cell(self, cell: int):
+        self.cells[cell] = NOBODY
+
+    def is_valid_move(self, from_cell: int, to_cell: int, backtracking_cells: None) -> bool:
+        if backtracking_cells and to_cell in backtracking_cells:
+            return False
+        if self.cells[from_cell] == NOBODY:
+            return False
+        if self.cells[to_cell] != NOBODY:
+            return False
+        fx, fy = cell_to_xy(from_cell)
+        tx, ty = cell_to_xy(to_cell)
+        arounds_delta = list_xy_around(0, 0, 1)
+        if (tx-fx, ty-fy) in arounds_delta:
+            return True
+        arounds_delta2 = [(x*2, y*2) for (x, y) in arounds_delta]
+        if (tx-fx, ty-fy) in arounds_delta2:
+            i = arounds_delta2.index((tx-fx, ty-fy))
+            dhx, dhy = arounds_delta[i]
+            hx, hy = fx+dhx, fy+dhy
+            hopped_cell = xy_to_cell(hx, hy)
+            assert hopped_cell != CELL_OOB
+            return self.cells[hopped_cell] != NOBODY
+        # TODO - No entry into other territory
+        return False
+
+    def move(self, from_cell: int, to_cell: int):
+        self.cells[to_cell] = self.cells[from_cell]
+        self.cells[from_cell] = NOBODY
+
+    def print(self):
+        for y in range(BOARD_MAX_DIM):
+            for x in range(BOARD_MAX_DIM):
+                cell = xy_to_cell(x, y)
+                if cell == CELL_OOB:
+                    print(' ', end='')
+                elif self.cells[cell] == NOBODY:
+                    print('.', end='')
+                print(str(self.cells[cell]), end='')
+            print()
+
+    def __getitem__(self, cell: int) -> int:
+        return self.cells[cell]

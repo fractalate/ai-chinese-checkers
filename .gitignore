@@ -1,2 +1,6 @@
+# python support
 __pycahce__/
 *.pyc
+
+# intermediate, trained models
+generations/
