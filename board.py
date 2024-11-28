@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 BOARD = '''
     A
@@ -99,9 +99,12 @@ def test_list_xy_around():
 class Board:
     def __init__(self):
         self.cells: List[int] = [NOBODY] * CELL_COUNT
+        self.setup_player(1)
+        self.setup_player(2)
 
     def setup_player(self, player: int):
-        pass # TODO
+        for cell in self.get_player_start_cells(player):
+            self.cells[cell] = player
 
     def place_pawn(self, player: int, cell: int):
         self.cells[cell] = player
@@ -109,7 +112,14 @@ class Board:
     def clear_cell(self, cell: int):
         self.cells[cell] = NOBODY
 
-    def is_valid_move(self, from_cell: int, to_cell: int, backtracking_cells: None) -> bool:
+    def get_player_start_cells(self, player: int):
+        if player == 1:
+            return list(range(10))
+        if player == 2:
+            return list(range(121 - 10, 121))
+        raise NotImplementedError()
+
+    def is_valid_move(self, from_cell: int, to_cell: int, backtracking_cells: Union[None, List[int]]) -> bool:
         if backtracking_cells and to_cell in backtracking_cells:
             return False
         if self.cells[from_cell] == NOBODY:
@@ -144,7 +154,8 @@ class Board:
                     print(' ', end='')
                 elif self.cells[cell] == NOBODY:
                     print('.', end='')
-                print(str(self.cells[cell]), end='')
+                else:
+                    print(str(self.cells[cell]), end='')
             print()
 
     def __getitem__(self, cell: int) -> int:
