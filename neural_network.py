@@ -114,9 +114,9 @@ def choose_best_action(game: Game, player: int, outputs: torch.Tensor) -> Union[
     # todo - this has to be amended to be recursive so we can do multi-hops
     return best_action
 
-L = 6 # is this too big?
+L = 4 # is this too big?
 N = calculate_input_neurons(L)
-H = 100_000 # how big is too big?
+H = 10_000 # how big is too big?
 M = 121*121 + 1
 
 class NeuralNetwork(nn.Module):
@@ -131,4 +131,3 @@ class NeuralNetwork(nn.Module):
         x = self.relu(x)
         x = self.fc2(x)
         return x
-

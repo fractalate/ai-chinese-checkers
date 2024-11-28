@@ -2,5 +2,8 @@
 __pycahce__/
 *.pyc
 
-# intermediate, trained models
-generations/
+# training data
+/training.db
+/training.log
+/matches/
+/models/

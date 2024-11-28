@@ -204,6 +204,5 @@ def play_a_match():
     print(f'{player1.name} - Score: {p1}')
     print(f'{player2.name} - Score: {p2}')
 
-
 if __name__ == '__main__':
     train()

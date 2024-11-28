@@ -147,16 +147,21 @@ class Board:
         self.cells[from_cell] = NOBODY
 
     def print(self):
+        print(self.dumps())
+
+    def dumps(self):
+        result = ''
         for y in range(BOARD_MAX_DIM):
             for x in range(BOARD_MAX_DIM):
                 cell = xy_to_cell(x, y)
                 if cell == CELL_OOB:
-                    print(' ', end='')
+                    result += ' '
                 elif self.cells[cell] == NOBODY:
-                    print('.', end='')
+                    result += '.'
                 else:
-                    print(str(self.cells[cell]), end='')
-            print()
+                    result += str(self.cells[cell])
+            result += '\n'
+        return result[:-1] # We're gonna print() this, so no training newline in the text data itself.
 
     def __getitem__(self, cell: int) -> int:
         return self.cells[cell]
