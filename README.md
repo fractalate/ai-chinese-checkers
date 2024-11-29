@@ -3,7 +3,7 @@
 Welcome to my Chinese Checkers AI project: a neural network for playing Chinese Checkers.
 It uses PyTorch to train a neural network which can make decisions about moves in a two player game.
 
-The project is in the "validating and adjusting the training methodology phase", which means that we are using small models for expedient testing and that the methodology for training may change, invalidating previousl generated models.
+The project is in the "validating and adjusting the training methodology phase", which means that we are using small models for expedient testing and that the methodology for training may change, invalidating previously generated models.
 Models may be trained, but they may not be effective.
 
 ## Setup and Running
