@@ -2,8 +2,5 @@
 __pycahce__/
 *.pyc
 
-# training data
-/training.db
-/training.log
-/matches/
-/models/
+# output
+/out/

@@ -48,7 +48,7 @@ def objective_pov_to_model_pov(game: Game, player: int, backtracking_cells: Unio
     elif player == 2:
         return (
             list(reversed(game.board.cells)), # TODO Gross
-            list(CELL_COUNT - x - 1 for x in (backtracking_cells if backtracking_cells else [])), # TODO Disgraceful.
+            list(model_pov_to_objective_pov(player, x) for x in (backtracking_cells if backtracking_cells else [])),
         )
     raise NotImplementedError()
 
@@ -98,7 +98,7 @@ def choose_best_action(game: Game, player: int, outputs: torch.Tensor) -> Union[
     for out, action in enumerate(outputs):
         score = action.item()
         _to_cell = (out // 121)
-        if _to_cell == 121: # no action case
+        if _to_cell == 121:  # no action case
             if score > best_action_score:
                 if game.is_valid_no_action():
                     best_action = None
@@ -110,13 +110,13 @@ def choose_best_action(game: Game, player: int, outputs: torch.Tensor) -> Union[
                 if game.is_valid_move(from_cell, to_cell):
                     best_action = (from_cell, to_cell)
                     best_action_score = score
-    assert best_action_score > -100.0 # todo is it possible for these scores to dip real low, like lower than this? If this  is -100 exactly, probably forgot to change pov
+    assert best_action_score > -100.0  # todo is it possible for these scores to dip real low, like lower than this? If this  is -100 exactly, probably forgot to change pov
     # todo - this has to be amended to be recursive so we can do multi-hops
     return best_action
 
-L = 4 # is this too big?
+L = 4  # is this too big?
 N = calculate_input_neurons(L)
-H = 10_000 # how big is too big?
+H = 10_000  # how big is too big?
 M = 121*121 + 1
 
 class NeuralNetwork(nn.Module):

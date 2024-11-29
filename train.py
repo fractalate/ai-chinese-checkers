@@ -1,120 +1,246 @@
+from typing import List, Tuple
+
+from datetime import datetime
 import os
-from typing import List
+import sqlite3
+from uuid import uuid4
 
 import torch
 import torch.nn as nn
 
 from neural_network import NeuralNetwork
-import board
 
-class Player:
-    def __init__(self, model, name):
-        self.model = model
-        self.name = name
-        self.moves = 0
-        self.winner = False
-        self.loser = False
+class Trainer:
+    def __init__(self, name: str):
+        self.trainer_version: str = 'basic_trainer'
+        self.name: str = name
 
-    def score(self, state: List[int]) -> float:
-        total = 0.0
-        if self.winner:
-            total += 1000.0
-        if self.loser:
-            total -= 1000.0
-        for cell, pawn in enumerate(state):
-            x, y = board.cell_to_xy(cell)
-            if pawn == board.FRIENDLY:
-                total += y
-            if cell in board.D_CELLS:
-                total += 10.0
-        return total
+        self.models_per_generation: int = 100
 
-def is_valid_move(state: List[int], from_cell: int, to_cell: int) -> bool:
-    fx, fy = board.cell_to_xy(from_cell)
-    tx, ty = board.cell_to_xy(to_cell)
-    if state[from_cell] != board.FRIENDLY:
-        return False
-    arounds_delta = board.list_xy_around(0, 0, 1)
-    arounds_delta2 = [(x*2, y*2) for (x, y) in arounds_delta]
-    if (tx-fx, ty-fy) in arounds_delta:
-        if state[to_cell] in [board.FRIENDLY, board.ENEMY]:
-            return False
-        return True
-    elif (tx-fx, ty-fy) in arounds_delta2:
-        i = arounds_delta2.index((tx-fx, ty-fy))
-        dhx, dhy = arounds_delta[i]
-        hx, hy = fx+dhx, fy+dhy
-        hcell = board.xy_to_cell(hx, hy)
-        assert hcell >= 0 and hcell < 121
-        if state[hcell] not in [board.FRIENDLY, board.ENEMY]:
-            return False
-        if state[to_cell] in [board.FRIENDLY, board.ENEMY]:
-            return False
-        return True
-    return False
+        base_dir = self.get_base_dir()
+        self.connection: sqlite3.Connection = sqlite3.connect(os.path.join(base_dir, 'trainer.db'), timeout=30)
 
-def is_game_won_by_friendly(state: List[int]) -> bool:
-    count_filled = 0
-    has_friendly_pawn = False
-    for (x, y) in board.D_CELLS:
-        cell = board.xy_to_cell(x, y)
-        if state[cell] == board.FRIENDLY:
-            has_friendly_pawn = True
-        if state[cell] != board.EMPTY:
-            count_filled += 1
-    return has_friendly_pawn and len(board.D_CELLS) == count_filled
+        self.setup()
 
-def is_game_lost_by_friendly(state: List[int]) -> bool:
-    state = board.flip_board_state(state)
-    return is_game_won_by_friendly(state)
+    def get_base_dir(self) -> str:
+        # 'out/basic_trainer/trial_103'
+        base_dir = os.path.join('out', self.trainer_version, self.name)
+        os.makedirs(base_dir, exist_ok=True)
+        return base_dir
 
-def is_valid_no_action(state: List[int]) -> bool:
-    return False # todo - only possible to do nothing when in a multi-hop
+    # ---------------------------------------------------------------------------------------------
+    # SETUP
+    # ---------------------------------------------------------------------------------------------
 
-def choose_best_action(state: List[int], outputs):
-    # otherwise we have to check whether some moves are valid
-    best_action_score = -100.0
-    best_action = None
-    for out, action in enumerate(outputs):
-        score = action.item()
-        from_cell = out % 121
-        to_cell = (out // 121)
-        if to_cell == 121: # no action case
-            if score > best_action_score:
-                if is_valid_no_action(state):
-                    best_action = None
-                    best_action_score = score
-        else:
-            if score > best_action_score:
-                if is_valid_move(state, from_cell, to_cell):
-                    best_action = (from_cell, to_cell)
-                    best_action_score = score
-    assert best_action_score > -100.0 # todo is it possible for these scores to dip real low, like lower than this?
-    # todo - this has to be amended to be recursive so we can do multi-hops
-    return best_action
+    def setup(self):
+        # cursor comes from inside the transaction which follows.
+        def set_trainer_detail(key: str, value: str, overwrite: bool = False, must_match_stored: bool = False) -> str:  # Getter also.
+            for (stored_value, ) in cursor.execute('''SELECT value FROM trainer_details WHERE key = ?''', (key, )).fetchall():
+                if must_match_stored and stored_value != value:
+                    raise Exception(f'Trainer({self.trainer_version=}, {self.name=}) cannot load when {key}={value}.')
+            if overwrite:
+                (result_value, ) = cursor.execute('''INSERT INTO trainer_details(key, value) VALUES(?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value RETURNING value''', (key, value)).fetchone()
+            else:
+                # Effectively a DO NOTHING with the SET value = value (contrast with SET value = excluded.value).
+                # Use this pattern so RETURNING behaves.
+                (result_value, ) = cursor.execute('''INSERT INTO trainer_details(key, value) VALUES(?, ?) ON CONFLICT (key) DO UPDATE SET value = value RETURNING value''', (key, value)).fetchone()
+            return result_value
 
-# Thoughts About Scoring
-# 
-# * Does it make sense for an AI to prioritize clearing out its starting zone?
-#   - I think so! Because it makes more space for the opponent to get their pieces in.
+        with self.connection:
+            self.connection('''BEGIN EXCLUSIVE''')
+            cursor = self.connection.cursor()
 
-def train():
-    try:
-        os.mkdir('generations')
-    except FileExistsError:
-        pass
-    max_gen_no = 1
-    for gen in os.listdir('generations'):
-        gen_no = int(gen)
-        if gen_no > max_gen_no:
-            max_gen_no = gen_no
-        del gen_no
-    gen_path = os.path.join('generations', str(max_gen_no))
-    try:
-        os.mkdir(gen_path)
-    except FileExistsError:
-        pass
-    train_generation(max_gen_no)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS trainer_details (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+
+            set_trainer_detail('trainer_version', self.trainer_version, must_match_stored=True)
+            set_trainer_detail('creation_time', str(datetime.now().astimezone()))
+            set_trainer_detail('last_open_time', str(datetime.now().astimezone()), overwrite=True)
+
+            self.models_per_generation = set_trainer_detail('models_per_generation', self.models_per_generation)
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS models (
+                    model_no INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT,
+                    gen INTEGER
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS model_provenances (
+                    model_no INTEGER PRIMARY KEY,
+                    description STRING
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS model_pedigrees (
+                    model_no INTEGER,
+                    parent_model_no INTEGER,
+                    role STRING
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS generations (
+                    gen INTEGER PRIMARY KEY AUTOINCREMENT,
+                    population INTEGER,
+                    complete BOOLEAN
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS matches (
+                    match_no INTEGER PRIMARY KEY,
+                    gen INTEGER PRIMARY,
+                    complete BOOLEAN
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS promised_matches (
+                    gen INTEGER,
+                    model_no_1 INTEGER,
+                    model_no_2 INTEGER
+                )
+            ''')
+
+    # ---------------------------------------------------------------------------------------------
+    # GENERATION MANAGEMENT
+    # ---------------------------------------------------------------------------------------------
+
+    def _load_gen(self, cursor: sqlite3.Cursor) -> Tuple[bool, None | Tuple[int, int]]:
+        rows = cursor.execute('''SELECT gen, population FROM generations WHERE NOT complete ORDER BY gen DESC''').fetchall()
+        assert len(rows) <= 1  # If this fails, something is up with generation creation or finalizing.
+        for (gen, population) in rows:
+            print(f'_load_gen() found {gen=}, {population=}')
+            return True, (gen, population)
+        return False, None
+
+    def _create_next_gen(self, cursor: sqlite3.Cursor) -> Tuple[int, int]:
+        gen, population = cursor.execute('''
+            INSERT INTO generations(population, complete) VALUES(?, ?)
+                RETURNING gen, population
+        ''', (self.models_per_generation, False)).fetchone()
+        print(f'_create_next_gen() created {gen=}, {population=}')
+        return gen, population
+
+    def load_gen(self) -> Tuple[int, int]:
+        with self.connection:
+            self.connection.execute('''BEGIN EXCLUSIVE''')
+            cursor = self.connection.cursor()
+
+            loaded, gen_info = self._load_gen(cursor)
+            if not loaded:
+                gen_info = self._create_next_gen(cursor)
+
+            return gen_info
+
+    # ---------------------------------------------------------------------------------------------
+    # BREEDING
+    # ---------------------------------------------------------------------------------------------
+
+    def ensure_ample_population(self, gen: int, population: int):
+        while True:
+            with self.connection:
+                cursor = self.connection.cursor()
+
+                (model_count, ) = cursor.execute('''
+                    SELECT COUNT(*) AS model_count FROM models WHERE gen = ?
+                ''', (gen, )).fetchone()
+                if model_count >= population:
+                    break
+
+            if gen == 1:
+                filename, provenance, pedigrees = self._create_new_model(gen)
+            else:
+                filename, provenance, pedigrees = self._breed_new_model(gen)
+
+            with self.connection:
+                self.connection('''BEGIN EXCLUSIVE''')
+                cursor = self.connection.cursor()
+
+                (model_count, ) = cursor.execute('''
+                    SELECT COUNT(*) AS model_count FROM models WHERE gen = ?
+                ''', (gen, )).fetchone()
+
+                if model_count >= population:
+                    print('ensure_ample_population() discarded a model due to race conditions')
+                    self._unbreed_model(gen, filename)
+                    break
+
+                (model_no, ) = cursor.execute('''
+                    INSERT INTO models(filename, gen) VALUES(?, ?) RETURNING model_no
+                ''', (filename, gen, )).fetchone()
+
+                cursor.execute('''
+                    INSERT INTO model_provenances(model_no, description) VALUES(?, ?)
+                ''', (model_no, provenance))
+
+                for (parent_model_no, role) in pedigrees:
+                    cursor.execute('''
+                        INSERT INTO model_pedigrees(model_no, parent_model_no, role) VALUES(?, ?, ?)
+                    ''', (model_no, parent_model_no, role))
+
+                print(f'ensure_ample_population() inserted model {filename=} {gen=} {model_no=}')
+
+    def _create_new_model(self, gen: int):
+        base_dir = self.get_base_dir()
+        os.makedirs(os.path.join(base_dir, 'models', str(gen)), exist_ok=True)
+        filename = str(uuid4()) + '.pth'
+        provenance = 'new untrained model'
+        pedigrees = []  # No parentage.
+        model = NeuralNetwork()
+        torch.save(model.state_dict(), os.path.join(base_dir, 'models', str(gen), filename))
+        print(f'_create_new_model() created a new model {filename=} {provenance=} {pedigrees=}')
+        return filename, provenance, pedigrees
+
+    def _breed_new_model(self, gen: int):
+        raise NotImplementedError()
+
+    def _unbreed_model(self, gen: int, filename: str):
+        base_dir = self.get_base_dir()
+        os.unlink(os.path.join(base_dir, 'models', str(gen), filename))
+
+    # ---------------------------------------------------------------------------------------------
+    # MATCHES
+    # ---------------------------------------------------------------------------------------------
+
+    def do_matches(self, gen: int):
+        raise NotImplementedError()
+
+    # ---------------------------------------------------------------------------------------------
+    # TRAINING
+    # ---------------------------------------------------------------------------------------------
+
+    def train(self):
+        gen, population = self.load_gen()
+        self.ensure_ample_population(gen, population)
+        self.do_matches(gen)
+        print('Nothing to do.')
+
+def main():
+    trainer = Trainer('sample')
+    trainer.train()
+
+if __name__ == '__main__':
+    main()
+
+"""
+
+def _make_dirs_for_model(gen: int):
+    pass
+
+def load_model(gen: int, model_no: int) -> NeuralNetwork:
+    pass
+
+def save_model(model: NeuralNetwork):
+    pass
 
 def get_models_for_generation(gen: int):
     model_nos = []
@@ -203,6 +329,4 @@ def play_a_match():
 
     print(f'{player1.name} - Score: {p1}')
     print(f'{player2.name} - Score: {p2}')
-
-if __name__ == '__main__':
-    train()
+"""
