@@ -116,7 +116,7 @@ def choose_best_action(game: Game, player: int, outputs: torch.Tensor) -> Union[
 
 L = 4  # is this too big?
 N = calculate_input_neurons(L)
-H = 10_000  # how big is too big?
+H = 40_000  # how big is too big?
 M = 121*121 + 1
 
 class NeuralNetwork(nn.Module):

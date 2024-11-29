@@ -51,19 +51,14 @@ def play(game: Game, player1: Player, player2: Player):
         inputs = game_state_to_input_vector(game, game.player_up)  # Maybe use player.player_no everywhere instead? Would I need more checks for if its a valid move, like if it shouldn't actually be the other players turn?
         outputs = player.model(inputs)
 
-        print()
         best_action = choose_best_action(game, game.player_up, outputs)
         if best_action is None:
-            print('Best Action: Do Nothing')
             game.do_nothing()
         else:
             from_cell, to_cell = best_action
-            print(f'Best Action: ({cell_to_xy(from_cell)}) to ({cell_to_xy(to_cell)})')
             game.move(from_cell, to_cell)
 
         player.moves += 1
-
-        game.board.print()
 
         if game.is_winner(1):
             player1.winner = True

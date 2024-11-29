@@ -3,11 +3,14 @@ from typing import List, Tuple
 from datetime import datetime
 import os
 import sqlite3
+import time
 from uuid import uuid4
 
 import torch
 import torch.nn as nn
 
+from game import Game
+from play import Player, play
 from neural_network import NeuralNetwork
 
 class Trainer:
@@ -15,7 +18,8 @@ class Trainer:
         self.trainer_version: str = 'basic_trainer'
         self.name: str = name
 
-        self.models_per_generation: int = 100
+        self.models_per_generation: int = 10  # TODO bump up to 23 so there are like 500 matches in a generation
+        self.top_models_to_keep_per_generation: int = 2  # TODO bump up to 23 so there are like 500 matches in a generation
 
         base_dir = self.get_base_dir()
         self.connection: sqlite3.Connection = sqlite3.connect(os.path.join(base_dir, 'trainer.db'), timeout=30)
@@ -97,17 +101,37 @@ class Trainer:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS matches (
                     match_no INTEGER PRIMARY KEY,
-                    gen INTEGER PRIMARY,
+                    gen INTEGER,
                     complete BOOLEAN
                 )
             ''')
 
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS promised_matches (
-                    gen INTEGER,
-                    model_no_1 INTEGER,
-                    model_no_2 INTEGER
+                CREATE TABLE IF NOT EXISTS match_models (
+                    match_no INTEGER,
+                    player_no INTEGER,
+                    model_no INTEGER
                 )
+            ''')
+
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_match_models_players ON match_models(match_no, player_no)
+            ''')
+
+            # Filled when the match is complete.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS match_scores (
+                    match_no INTEGER,
+                    player_no INTEGER,
+                    model_no INTEGER,
+                    winner BOOLEAN,
+                    loser BOOLEAN,
+                    score FLOAT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_match_scores_players ON match_scores(match_no, player_no)
             ''')
 
     # ---------------------------------------------------------------------------------------------
@@ -189,6 +213,14 @@ class Trainer:
 
                 print(f'ensure_ample_population() inserted model {filename=} {gen=} {model_no=}')
 
+    def complete_generation(self, gen: int):
+        with self.connection:
+            self.connection.execute('''BEGIN EXCLUSIVE''')
+            cursor = self.connection.cursor()
+
+            # Multiple processes will come through here and do this. But that's fine.
+            cursor.execute('''UPDATE generations SET complete = TRUE WHERE gen = ?''', (gen, ))
+
     def _create_new_model(self, gen: int):
         base_dir = self.get_base_dir()
         os.makedirs(os.path.join(base_dir, 'models', str(gen)), exist_ok=True)
@@ -212,17 +244,146 @@ class Trainer:
     # ---------------------------------------------------------------------------------------------
 
     def do_matches(self, gen: int):
-        raise NotImplementedError()
+        while True:
+            found, match_info = self.find_needed_match(gen)
+            if not found:
+                break
+            match_no, model_no_1, model_no_2 = match_info
+            game, player1, player2 = self.do_match(match_no, model_no_1, model_no_2)
+            self.complete_match(gen, game, match_no, model_no_1, player1, model_no_2, player2)
+
+    def find_needed_match(self, gen: int) -> Tuple[bool, None | Tuple[int, int, int]]:
+        with self.connection:
+            self.connection.execute('''BEGIN EXCLUSIVE''')
+            cursor = self.connection.cursor()
+
+            # First, try to get a match that hasn't been previously promised.
+            rows = cursor.execute('''
+                SELECT * FROM (
+                    SELECT a.model_no, b.model_no FROM models a, models b
+                        WHERE a.gen = ? AND b.gen = ? AND a.model_no != b.model_no
+                    EXCEPT
+                    SELECT mm1.model_no, mm2.model_no
+                        FROM matches, match_models mm1, match_models mm2
+                        WHERE matches.match_no = mm1.match_no AND mm1.player_no = 1
+                        AND matches.match_no = mm2.match_no AND mm2.player_no = 2
+                ) t
+                    ORDER BY RANDOM()
+                    LIMIT 1
+            ''', (gen, gen, )).fetchall()
+
+            if len(rows) > 0:
+                for (model_no_1, model_no_2) in rows:
+                    break
+
+                (match_no, ) = cursor.execute('''
+                    INSERT INTO matches(gen, complete) VALUES(?, ?) RETURNING match_no
+                ''', (gen, False)).fetchone()
+
+                cursor.execute('''
+                    INSERT INTO match_models(match_no, model_no, player_no) VALUES(?, ?, ?)
+                ''', (match_no, model_no_1, 1))
+
+                cursor.execute('''
+                    INSERT INTO match_models(match_no, model_no, player_no) VALUES(?, ?, ?)
+                ''', (match_no, model_no_2, 2))
+
+                print(f'find_needed_match() created new match {match_no=}, {model_no_1=}, {model_no_2=}')
+
+                return True, (match_no, model_no_1, model_no_2)
+
+            # Then, if there were no such, get one that has been promised, but is not complete.
+            rows = cursor.execute('''
+                SELECT matches.match_no, mm1.model_no, mm2.model_no
+                    FROM matches, match_models mm1, match_models mm2
+                    WHERE gen = ?
+                    AND matches.match_no = mm1.match_no AND mm1.player_no = 1
+                    AND matches.match_no = mm2.match_no AND mm2.player_no = 2
+                    AND NOT complete
+                ORDER BY RANDOM()
+                LIMIT 1
+            ''', (gen, )).fetchall()
+
+            for (match_no, model_no_1, model_no_2) in rows:
+                print(f'find_needed_match() gave old incomplete match {match_no=}, {model_no_1=}, {model_no_2=}')
+                return True, (match_no, model_no_1, model_no_2)
+            return False, None
+
+    def _load_model(self, model_no):
+        with self.connection:
+            cursor = self.connection.cursor()
+
+            (gen, filename, ) = cursor.execute('''
+                SELECT gen, filename FROM models WHERE model_no = ?
+            ''', (model_no ,)).fetchone()
+
+            base_dir = self.get_base_dir()
+            
+            model = NeuralNetwork()  # TODO How do I prevent initializing this before replacing its contents?
+            model_path = os.path.join(base_dir, 'models', str(gen), filename)
+            model.load_state_dict(torch.load(model_path, weights_only=True))
+
+            return model
+
+    def do_match(self, match_no: int, model_no_1: int, model_no_2: int):
+        model_1 = self._load_model(model_no_1)
+        player1 = Player(model_1, 'Player 1', 1)
+        model_2 = self._load_model(model_no_2)
+        player2 = Player(model_2, 'Player 2', 2)
+        game = Game()
+        print(f'do_match() is playing {match_no=} {model_no_1=} {model_no_2=}')
+        play(game, player1, player2)
+        return game, player1, player2
+
+    def complete_match(self, gen: int, game: Game, match_no: int, model_no_1: int, player1: Player, model_no_2: int, player2: Player):
+        with self.connection:
+            self.connection.execute('''BEGIN EXCLUSIVE''')
+            cursor = self.connection.cursor()
+
+            (complete, ) = cursor.execute('''
+                SELECT complete FROM matches WHERE match_no = ?
+            ''', (match_no, )).fetchone()
+
+            if complete:
+                print(f'complete_match() discarded match {match_no=} {model_no_1=} {model_no_2=}')
+                return
+
+            base_dir = self.get_base_dir()
+            os.makedirs(os.path.join(base_dir, 'matches', str(gen)), exist_ok=True)
+            with open(os.path.join(base_dir, 'matches', str(gen), str(match_no) + '.txt'), 'w') as fout:
+                fout.write(game.board.dumps() + '\n')
+
+            player1_score = player1.score(game)
+            player2_score = player2.score(game)
+
+            cursor.execute('''
+                UPDATE matches SET complete = TRUE
+                    WHERE match_no = ?
+            ''', (match_no, ))
+
+            cursor.execute('''
+                INSERT INTO match_scores(match_no, player_no, model_no, winner, loser, score)
+                    VALUES(?, ?, ?, ?, ?, ?)
+            ''', (match_no, 1, model_no_1, player1.winner, player1.winner, player1_score))
+
+            cursor.execute('''
+                INSERT INTO match_scores(match_no, player_no, model_no, winner, loser, score)
+                    VALUES(?, ?, ?, ?, ?, ?)
+            ''', (match_no, 2, model_no_2, player2.winner, player2.winner, player2_score))
+
+            print(f'complete_match() recorded match {match_no=} {model_no_1=} {player1_score=} (W/L {player1.winner} {player1.loser}) {model_no_2=} {player2_score=} (W/L {player2.winner} {player2.loser})')
 
     # ---------------------------------------------------------------------------------------------
     # TRAINING
     # ---------------------------------------------------------------------------------------------
 
     def train(self):
-        gen, population = self.load_gen()
-        self.ensure_ample_population(gen, population)
-        self.do_matches(gen)
-        print('Nothing to do.')
+        while True:
+            gen, population = self.load_gen()
+            self.ensure_ample_population(gen, population)
+            self.do_matches(gen)
+            self.complete_generation(gen)
+            time.sleep(1)
 
 def main():
     trainer = Trainer('sample')
@@ -230,103 +391,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-"""
-
-def _make_dirs_for_model(gen: int):
-    pass
-
-def load_model(gen: int, model_no: int) -> NeuralNetwork:
-    pass
-
-def save_model(model: NeuralNetwork):
-    pass
-
-def get_models_for_generation(gen: int):
-    model_nos = []
-    gen_path = os.path.join('generations', str(gen))
-    for model in os.listdir(gen_path):
-        if model.endswith('.pth'):
-            model_no = int(model[:-4])
-            model_nos.append(model_no)
-    return model_nos
-
-def train_generation(gen: int):
-    model_nos = get_models_for_generation(gen)
-    if gen == 1:
-        new_model_no = 1
-        while len(model_nos) < 10:
-            while new_model_no in model_nos:
-                new_model_no += 1
-            model_nos.append(new_model_no)
-            print(f'Creating model {new_model_no} for generation {gen}...')
-            model = NeuralNetwork()
-            where = os.path.join('generations', str(gen), str(new_model_no) + '.pth')
-            torch.save(model.state_dict(), where)
-            print(f'Model saved to {where}')
-
-def play_a_match():
-    player1 = Player(
-        model=NeuralNetwork(),
-        name='Player 1',
-    )
-
-    player2 = Player(
-        model=NeuralNetwork(),
-        name='Player 2',
-    )
-
-    state = board.new_board_state()
-    winner = None
-
-    for i in range(30):
-        if is_game_won_by_friendly(state):
-            winner = player1
-            player1.winner = True
-            player2.loser = True
-            break
-
-        xplayer = player1 if i % 2 == 0 else player2
-        oplayer = player2 if i % 2 == 0 else player1
-
-        inputs = board_state_to_input_vector(state)
-        outputs = player1.model(inputs)
-
-        print()
-        print(f'X - {xplayer.name}')
-        print(f'O - {oplayer.name}')
-
-        best_action = choose_best_action(state, outputs)
-        if best_action is None:
-            print('Best Action: Do Nothing')
-        else:
-            fc, tc = best_action
-            fx, fy = board.cell_to_xy(fc)
-            tx, ty = board.cell_to_xy(tc)
-            print(f'Best Action: ({fx}, {fy}) to ({tx}, {ty})')
-
-            state[tc] = state[fc]
-            state[fc] = board.EMPTY
-            player1.moves += 1
-
-        if is_game_won_by_friendly(state):
-            winner = player1
-            player1.winner = True
-            player2.loser = True
-            break
-
-        board.print_board(state if i % 2 == 0 else board.flip_board_state(state))
-        state = board.flip_board_state(state)
-        player1, player2 = player2, player1
-
-    if winner is None:
-        print('The only way to win is to not play the game. These models did not "play". (Draw)')
-    else:
-        print(f'Winner: {winner}!')
-
-    p1 = player1.score(state)
-    p2 = player2.score(board.flip_board_state(state))
-
-    print(f'{player1.name} - Score: {p1}')
-    print(f'{player2.name} - Score: {p2}')
-"""
