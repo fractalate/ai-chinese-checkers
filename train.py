@@ -18,8 +18,9 @@ class Trainer:
         self.trainer_version: str = 'basic_trainer'
         self.name: str = name
 
-        self.models_per_generation: int = 5  # TODO bump up to 23 so there are like 500 matches in a generation
-        self.top_models_to_keep_per_generation: int = 2  # TODO bump up too
+        self.models_per_generation: int = 12  # TODO bump up to 23 so there are like 500 matches in a generation
+        self.top_models_to_keep_per_generation: int = 3  # TODO bump up too
+        self.lesser_models_to_breed_with_top_models: int = 2
 
         base_dir = self.get_base_dir()
         self.connection: sqlite3.Connection = sqlite3.connect(os.path.join(base_dir, 'trainer.db'), timeout=30)
@@ -67,6 +68,7 @@ class Trainer:
 
             self.models_per_generation = int(set_trainer_detail('models_per_generation', self.models_per_generation))
             self.top_models_to_keep_per_generation = int(set_trainer_detail('top_models_to_keep_per_generation', self.top_models_to_keep_per_generation))
+            self.lesser_models_to_breed_with_top_models = int(set_trainer_detail('lesser_models_to_breed_with_top_models', self.lesser_models_to_breed_with_top_models))
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS models (
@@ -199,21 +201,25 @@ class Trainer:
                 models = list(models)
 
                 top_models = models[:self.top_models_to_keep_per_generation]
-                top_models_no = []
+                top_model_nos = []
                 for (model_no, _) in top_models:
-                    top_models_no.append(model_no)
+                    top_model_nos.append(model_no)
+                lesser_models = models[self.top_models_to_keep_per_generation:]
+                lesser_model_nos = []
+                for (model_no, _) in lesser_models:
+                    lesser_model_nos.append(model_no)
 
                 count_models_planned = 0
 
-                for model_no_1 in top_models_no:
+                for model_no_1 in top_model_nos:
                     cursor.execute('''
                         INSERT INTO model_plans(gen, action, model_no_1, promised, complete) values(?, ?, ?, ?, ?)
                     ''', (gen + 1, 'copy', model_no_1, False, False))
                     count_models_planned += 1
                     print(f'complete_generation() planned copy of top model {model_no_1=}')
 
-                for model_no_1 in top_models_no:
-                    for model_no_2 in top_models_no:
+                for model_no_1 in top_model_nos:
+                    for model_no_2 in top_model_nos:
                         if model_no_1 == model_no_2:
                             continue
                         cursor.execute('''
@@ -221,6 +227,14 @@ class Trainer:
                         ''', (gen + 1, 'breed_crossover_parameters', model_no_1, model_no_2, False, False))
                         count_models_planned += 1
                         print(f'complete_generation() planned breed crossover parameters of top models {model_no_1=} {model_no_2=}')
+
+                for model_no_1 in top_model_nos:
+                    for model_no_2 in lesser_model_nos[:self.lesser_models_to_breed_with_top_models]:
+                        cursor.execute('''
+                            INSERT INTO model_plans(gen, action, model_no_1, model_no_2, promised, complete) values(?, ?, ?, ?, ?, ?)
+                        ''', (gen + 1, 'breed_crossover_parameters', model_no_1, model_no_2, False, False))
+                        count_models_planned += 1
+                        print(f'complete_generation() planned breed crossover parameters of top model with lesser {model_no_1=} {model_no_2=}')
 
                 while count_models_planned < self.models_per_generation:
                     for (model_no_1, _) in models:
@@ -380,7 +394,7 @@ class Trainer:
 
                 if complete:
                     print(f'_breed_new_model() discarding generated model due to race condition {model_plan_info=}')
-                    self._unbreed_model()
+                    self._unbreed_model(gen, filename)
                     break  # Nothing to do. All models have been bread.
 
                 cursor.execute('''UPDATE model_plans SET complete = TRUE WHERE model_plan_no = ?''', (model_plan_no, ))
