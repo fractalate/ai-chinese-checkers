@@ -5,8 +5,7 @@ import functools
 
 import torch
 
-functools.cache
-BOARD = '''
+BOARD = """
     1
     11
     111
@@ -24,21 +23,37 @@ BOARD = '''
           222
            22
             2
-'''
+"""
+
+"""
+##
+#X#
+ ##
+"""
+ADJACENT_CELLS = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 1)]
+
+"""
+# #
+ ..
+#.X.#
+  ..
+  # #
+"""
+ADJACENT_CELLS_2 = [(-2, -2), (-2, 0), (0, -2), (0, 2), (2, 0), (2, 2)]
 
 BOARD_GRID_DIM = 17
 OOB = 0
 NOBODY = -1
 
-# "new" is a lie in this function name.
+
 @functools.cache
-def _new_board_state_tensor(num_players: int) -> torch.Tensor:
+def _lookup_board_state_tensor(num_players: int) -> torch.Tensor:
     state = torch.empty((BOARD_GRID_DIM, BOARD_GRID_DIM), dtype=torch.int32)
-    for row, row_text in enumerate(BOARD.rstrip().split('\n')[1:]):
+    for row, row_text in enumerate(BOARD.rstrip().split("\n")[1:]):
         col = 0
         while col < len(row_text) and col < BOARD_GRID_DIM:
             c = row_text[col]
-            if c == ' ':
+            if c == " ":
                 state[row, col] = OOB
             elif not c.isdigit():
                 state[row, col] = NOBODY
@@ -52,16 +67,23 @@ def _new_board_state_tensor(num_players: int) -> torch.Tensor:
             col += 1
     return state
 
+
 def new_board_state_tensor(num_players: int) -> torch.Tensor:
-    return _new_board_state_tensor(num_players).clone()
+    return _lookup_board_state_tensor(num_players).clone()
+
+
+BOARD_6 = new_board_state_tensor(6)
+
 
 def get_opposition_player_no(player_no: int) -> int:
     return player_no - 1 if player_no % 2 == 0 else player_no + 1
 
-# End zones are across eachother.
-BOARD_6 = new_board_state_tensor(6)
+
+# End zones are across from each other.
 def is_valid_cell_for_player(row: int, col: int, player_no: int) -> bool:
-    if row < 0 or row >= BOARD_GRID_DIM or col < 0 or col >= BOARD_GRID_DIM:  # TODO Do I want this guard here or elsewhere?
+    if (
+        row < 0 or row >= BOARD_GRID_DIM or col < 0 or col >= BOARD_GRID_DIM
+    ):  # TODO Do I want this guard here or elsewhere?
         return False
     cell_value = BOARD_6[row, col]
     if cell_value == OOB:
@@ -73,28 +95,23 @@ def is_valid_cell_for_player(row: int, col: int, player_no: int) -> bool:
     # It must be another player's end-zone, so the cell is valid only if it's for the opposition.
     return cell_value == get_opposition_player_no(player_no)
 
-'''
-##
-#X#
- ##
-'''
-ADJACENT_CELLS = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 1)]
 
-'''
-# #
- ..
-#.X.#
-  ..
-  # #
-'''
-ADJACENT_CELLS_2 = [(-2, -2), (-2, 0), (0, -2), (0, 2), (2, 0), (2, 2)]
+@functools.cache
+def get_goal_cells(player_no: int) -> List[int]:
+    opposition = get_opposition_player_no(player_no)
+    results = []
+    for row in range(BOARD_GRID_DIM):
+        for col in range(BOARD_GRID_DIM):
+            if BOARD_6[row, col] == opposition:
+                results.append((row, col))
+    return results
 
 
 class Board:
     def __init__(self, skip_init: bool = False):
-        '''
+        """
         :param skip_init: If set to True, the state tensor will not be initialized with zeros (for efficiency).
-        '''
+        """
         # The board is represented by a 17x17 grid filled with integer values.
         # OOB (0) means out of bounds.
         # NOBODY (-1) means unoccupied space.
@@ -107,7 +124,9 @@ class Board:
     def setup_board(self, num_players: int):
         self.state = new_board_state_tensor(num_players)
 
-    def is_valid_move(self, from_row: int, from_col: int, to_row: int, to_col: int) -> bool:
+    def is_valid_move(
+        self, from_row: int, from_col: int, to_row: int, to_col: int
+    ) -> bool:
         # Check that the "from" cell is some player's piece.
         player_no = self.state[from_row, from_col]
         if player_no <= 0:
@@ -122,7 +141,9 @@ class Board:
         # Consider single jumps.
         if (to_row - from_row, to_col - from_col) in ADJACENT_CELLS:
             return True
-        # Do a bredth first search of valid hops to assess multi-hops.
+        if from_row % 2 != to_row % 2 or from_col % 2 != to_col % 2:
+            return False  # A hop always preserves odd/even-ness of the row and column.
+        # Do a breadth first search of valid hops to assess multi-hops.
         queue = deque([(from_row, from_col)])
         backtracking = set(queue)
         while queue:
@@ -148,25 +169,33 @@ class Board:
                     backtracking.add(entry)
         return False
 
+    def move(self, from_row: int, from_col: int, to_row: int, to_col: int):
+        self.state[to_row, from_row] = self.state[from_row, from_col]
+        self.state[from_row, from_col] = 0
+
     def dumps(self, highlight_cells: List[Tuple[int, int]] = None) -> str:
         result = []
         for row in range(BOARD_GRID_DIM):
             line = []
             for col in range(BOARD_GRID_DIM):
                 if highlight_cells and (row, col) in highlight_cells:
-                    line.append('*')
+                    line.append("*")
                 elif self.state[row, col] == OOB:
-                    line.append(' ')
+                    line.append(" ")
                 elif self.state[row, col] == NOBODY:
-                    line.append('.')
+                    line.append(".")
                 else:
                     line.append(str(self.state[row, col].item()))
-            result.append(''.join(line))
-        return '\n'.join(result)
+            result.append("".join(line))
+        return "\n".join(result)
 
+
+"""
 b = Board()
 b.setup_board(2)
 b.state[5, 4] = 1
+b.state[5, 5] = 1
+b.state[6, 5] = 1
 b.state[7, 4] = 1
 r0, c0 = 2, 4
 highlight_cells = []
@@ -175,3 +204,4 @@ for r in range(BOARD_GRID_DIM):
         if b.is_valid_move(r0, c0, r, c):
             highlight_cells.append((r, c))
 print(b.dumps(highlight_cells=highlight_cells))
+"""
