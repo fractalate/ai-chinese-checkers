@@ -48,3 +48,8 @@ for row, col in get_goal_cells(1)[1:]:
     game.board.state[row, col] = 2
 print(game.is_winner(1))
 print(game.board.dumps())
+
+out_moves = []
+game.board.state[5, 4] = 1
+print(game.board.is_valid_move(2, 4, 6, 4, out_moves=out_moves))
+print(out_moves)

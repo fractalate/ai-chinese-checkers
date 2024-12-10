@@ -125,8 +125,16 @@ class Board:
         self.state = new_board_state_tensor(num_players)
 
     def is_valid_move(
-        self, from_row: int, from_col: int, to_row: int, to_col: int
+        self,
+        from_row: int,
+        from_col: int,
+        to_row: int,
+        to_col: int,
+        out_moves: None | List[Tuple[Tuple[int, int], Tuple[int, int]]] = None,
     ) -> bool:
+        # Gotta move.
+        if from_row == to_row and from_col == to_col:
+            return False
         # Check that the "from" cell is some player's piece.
         player_no = self.state[from_row, from_col]
         if player_no <= 0:
@@ -140,12 +148,16 @@ class Board:
             return False
         # Consider single jumps.
         if (to_row - from_row, to_col - from_col) in ADJACENT_CELLS:
+            if out_moves is not None:
+                out_moves.append((from_row, from_col), (to_row, to_col))
             return True
         if from_row % 2 != to_row % 2 or from_col % 2 != to_col % 2:
             return False  # A hop always preserves odd/even-ness of the row and column.
         # Do a breadth first search of valid hops to assess multi-hops.
         queue = deque([(from_row, from_col)])
         backtracking = set(queue)
+        if out_moves is not None:
+            parent_cell = dict()  # XXX We're not tracking the minimum cost paths, but that might be nicer to do.
         while queue:
             fr, fc = queue.popleft()
             for dr, dc in ADJACENT_CELLS_2:
@@ -160,18 +172,26 @@ class Board:
                 tc1 = fc + dc // 2
                 if self.state[tr1, tc1] <= 0:
                     continue  # Player must hop a piece.
-                elif tr == to_row and tc == to_col:
-                    return True  # If we arrive at our "to" cell, the sequence of hops was valid.
-                # Otherwise, the hop might be valid, so consider it later, but only if the hop is not a backtrack.
                 entry = (tr, tc)
+                if out_moves is not None:
+                    parent_cell[entry] = (fr, fc)
+                # If we arrive at our "to" cell, the sequence of hops was valid.
+                if tr == to_row and tc == to_col:
+                    if out_moves is not None:
+                        while parent := parent_cell.get(entry):
+                            out_moves.append((parent, entry))
+                            entry = parent
+                        out_moves.reverse()
+                    return True
+                # Otherwise, the hop might be valid, so consider it later, but only if the hop is not a backtrack.
                 if entry not in backtracking:
                     queue.append(entry)
                     backtracking.add(entry)
         return False
 
     def move(self, from_row: int, from_col: int, to_row: int, to_col: int):
-        self.state[to_row, from_row] = self.state[from_row, from_col]
-        self.state[from_row, from_col] = 0
+        self.state[to_row, to_col] = self.state[from_row, from_col]
+        self.state[from_row, from_col] = NOBODY
 
     def dumps(self, highlight_cells: List[Tuple[int, int]] = None) -> str:
         result = []
