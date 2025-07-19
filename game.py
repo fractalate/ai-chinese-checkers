@@ -1,3 +1,4 @@
+from typing import Optional
 from board import Board, NOBODY, get_goal_cells
 
 
@@ -25,6 +26,12 @@ class Game:
     def advance_turn(self):
         self.player_up = self.player_up % self.num_players + 1
         self.turn_no += 1
+
+    def get_winner(self) -> Optional[int]:
+        for player_no in range(1, self.num_players + 1):
+            if self.is_winner(player_no):
+                return player_no
+        return None
 
     def is_winner(self, player_no: int):
         has_player_pawn = False

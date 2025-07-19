@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Generator, List, Tuple, Union
 
 from collections import deque
 import functools
