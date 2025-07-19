@@ -101,7 +101,7 @@ def model_pov_to_objective_pov(player_no: int, cell: int) -> int:
     raise NotImplementedError()
 
 
-def choose_valid_mode(model: NeuralNetwork, game: Game) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+def choose_best_move(model: NeuralNetwork, game: Game) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
     input_vector = game_state_to_input_vector(game, game.player_up)
 
     actions = model(input_vector)
@@ -126,14 +126,14 @@ if __name__ == "__main__":
     model = NeuralNetwork()
     game = Game(2)
 
-    move = choose_valid_mode(model, game)
+    move = choose_best_move(model, game)
     print("Best Move:", move)
     if move:
         game.move(*move[0], *move[1])
         print(game.board.dumps())
     print()
 
-    move = choose_valid_mode(model, game)
+    move = choose_best_move(model, game)
     print("Best Move:", move)
     if move:
         game.move(*move[0], *move[1])
