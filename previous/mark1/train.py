@@ -18,7 +18,7 @@ class Trainer:
         self.trainer_version: str = 'basic_trainer'
         self.name: str = name
 
-        self.models_per_generation: int = 12  # TODO bump up to 23 so there are like 500 matches in a generation
+        self.models_per_generation: int = 23  # TODO bump up to 23 so there are like 500 matches in a generation
         self.top_models_to_keep_per_generation: int = 3  # TODO bump up too
         self.lesser_models_to_breed_with_top_models: int = 2
 
@@ -325,9 +325,8 @@ class Trainer:
         pedigrees = [(model_no, 'ancestor')]
         model = self._load_model(model_no)
         for param in model.parameters():
-            if torch.rand(1).item() < 0.05:
-                noise = torch.randn_like(param.data) * 0.01
-                param.data += noise
+            noise = torch.randn_like(param.data) * 0.01
+            param.data += noise
         torch.save(model.state_dict(), os.path.join(base_dir, 'models', str(to_gen), filename))
         print(f'_breed_new_model_mutate() mutated {model_no=} to {filename=} {provenance=} {pedigrees=}')
         return filename, provenance, pedigrees
