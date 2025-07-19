@@ -210,18 +210,17 @@ class Board:
         return "\n".join(result)
 
 
-"""
-b = Board()
-b.setup_board(2)
-b.state[5, 4] = 1
-b.state[5, 5] = 1
-b.state[6, 5] = 1
-b.state[7, 4] = 1
-r0, c0 = 2, 4
-highlight_cells = []
-for r in range(BOARD_GRID_DIM):
-    for c in range(BOARD_GRID_DIM):
-        if b.is_valid_move(r0, c0, r, c):
-            highlight_cells.append((r, c))
-print(b.dumps(highlight_cells=highlight_cells))
-"""
+if __name__ == "__main__":
+    b = Board()
+    b.setup_board(2)
+    b.state[5, 4] = 1
+    b.state[5, 5] = 1
+    b.state[6, 5] = 1
+    b.state[7, 4] = 1
+    r0, c0 = 2, 4
+    highlight_cells = []
+    for r in range(BOARD_GRID_DIM):
+        for c in range(BOARD_GRID_DIM):
+            if b.is_valid_move(r0, c0, r, c):
+                highlight_cells.append((r, c))
+    print(b.dumps(highlight_cells=highlight_cells))

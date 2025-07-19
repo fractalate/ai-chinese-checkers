@@ -3,7 +3,7 @@ from board import Board, NOBODY, get_goal_cells
 
 class Game:
     def __init__(self, num_players: int):
-        self.board: Board = Board()
+        self.board: Board = Board(skip_init=True)
         self.num_players: int = num_players
         self.player_up: int = 1
         self.turn_no: int = 1  # Increases by 1 after a player completes a move.
