@@ -1,5 +1,5 @@
 from typing import Optional
-from board import Board, NOBODY, get_goal_cells
+from aicc.board import Board, NOBODY, get_goal_cells
 
 
 class Game:

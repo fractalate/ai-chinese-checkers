@@ -1,6 +1,6 @@
-from neural_network import NeuralNetwork, choose_best_move
-from board import BOARD_GRID_DIM, get_goal_cells
-from game import Game
+from aicc.neural_network import NeuralNetwork, choose_best_move
+from aicc.board import BOARD_GRID_DIM, get_goal_cells
+from aicc.game import Game
 
 
 def score_game(game: Game, player_no: int) -> float:

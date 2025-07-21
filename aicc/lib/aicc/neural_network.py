@@ -2,8 +2,8 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
-from game import Game
-from board import BOARD_GRID_DIM, NOBODY, OOB
+from aicc.game import Game
+from aicc.board import BOARD_GRID_DIM, NOBODY, OOB
 
 # There are 121 cells for pawns in the game of Chinese Checkers.
 #
