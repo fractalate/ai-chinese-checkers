@@ -108,6 +108,8 @@ def get_goal_cells(player_no: int) -> List[int]:
 
 
 class Board:
+    GRID_DIM = BOARD_GRID_DIM
+
     def __init__(self, skip_init: bool = False):
         """
         :param skip_init: If set to True, the state tensor will not be initialized with zeros (for efficiency).
@@ -208,19 +210,3 @@ class Board:
                     line.append(str(self.state[row, col].item()))
             result.append("".join(line))
         return "\n".join(result)
-
-
-if __name__ == "__main__":
-    b = Board()
-    b.setup_board(2)
-    b.state[5, 4] = 1
-    b.state[5, 5] = 1
-    b.state[6, 5] = 1
-    b.state[7, 4] = 1
-    r0, c0 = 2, 4
-    highlight_cells = []
-    for r in range(BOARD_GRID_DIM):
-        for c in range(BOARD_GRID_DIM):
-            if b.is_valid_move(r0, c0, r, c):
-                highlight_cells.append((r, c))
-    print(b.dumps(highlight_cells=highlight_cells))

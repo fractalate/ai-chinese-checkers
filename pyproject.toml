@@ -7,18 +7,16 @@ name = "ai-chinese-checkers"
 version = "0.2.0"
 description = "AI Chinese Checkers"
 authors = [
-    { name="Kate Novak", email="kje@cochleoid.com" },
+  { name="Kate Novak", email="kje@cochleoid.com" },
 ]
 readme = "README.md"
 license = "MIT"
+requires-python = ">=3.11"
 dependencies = [
   "numpy",
+  "pytest",
   "torch",
 ]
-requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]
-where = [
-  "./aicc/lib",
-  "./trainer/lib",
-]
+where = ["src"]
