@@ -9,8 +9,8 @@ def test_dumps():
     board.state[7, 4] = 1
     r0, c0 = 2, 4
     highlight_cells = []
-    for r in range(board.GRID_DIM):
-        for c in range(board.GRID_DIM):
+    for r in range(Board.GRID_DIM):
+        for c in range(Board.GRID_DIM):
             if board.is_valid_move(r0, c0, r, c):
                 highlight_cells.append((r, c))
     assert board.dumps(highlight_cells=highlight_cells) == (

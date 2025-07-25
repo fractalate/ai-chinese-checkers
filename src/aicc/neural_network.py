@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from aicc.game import Game
-from aicc.board import BOARD_GRID_DIM, NOBODY, OOB
+from aicc.board import Board
 
 # There are 121 cells for pawns in the game of Chinese Checkers.
 #
@@ -33,12 +33,12 @@ def create_cell_maps():
     cell_by_row_col = {}
     row_col_by_cell = []
 
-    indexes = range(BOARD_GRID_DIM)
+    indexes = range(Board.GRID_DIM)
 
     for row in indexes:
         for col in indexes:
             cell = game.board.state[row, col]
-            if cell == OOB:
+            if cell == Board.OOB:
                 continue
             cell_by_row_col[(row, col)] = len(row_col_by_cell)
             row_col_by_cell.append((row, col))
@@ -73,15 +73,15 @@ def game_state_to_input_vector(game: Game, player_no: int):
     if game.player_up != player_no:
         flip = not flip
 
-    indexes = range(BOARD_GRID_DIM - 1, -1, -1) if flip else range(BOARD_GRID_DIM)
+    indexes = range(Board.GRID_DIM - 1, -1, -1) if flip else range(Board.GRID_DIM)
 
     for row in indexes:
         for col in indexes:
             cell = game.board.state[row, col]
-            if cell == OOB:
+            if cell == Board.OOB:
                 continue
 
-            if cell != NOBODY:
+            if cell != Board.NOBODY:
                 # Occupation segment.
                 input_vector[cell_no] = 1.0
                 if cell != player_no:

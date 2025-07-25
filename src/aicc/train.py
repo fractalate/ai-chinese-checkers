@@ -1,5 +1,5 @@
 from aicc.neural_network import NeuralNetwork, choose_best_move
-from aicc.board import BOARD_GRID_DIM, get_goal_cells
+from aicc.board import Board
 from aicc.game import Game
 
 
@@ -13,16 +13,16 @@ def score_game(game: Game, player_no: int) -> float:
         # You lost.
         total -= 200.0
 
-    goal = get_goal_cells(player_no)
+    goal = Board.get_goal_cells(player_no)
 
-    for row in range(BOARD_GRID_DIM):
-        for col in range(BOARD_GRID_DIM):
+    for row in range(Board.GRID_DIM):
+        for col in range(Board.GRID_DIM):
             cell = game.board.state[row, col]
             if cell == player_no:
                 if player_no == 1:
                     total += row
                 elif player_no == 2:
-                    total += BOARD_GRID_DIM - row - 1
+                    total += Board.GRID_DIM - row - 1
 
                 if (row, col) in goal:
                     total += 10.0
