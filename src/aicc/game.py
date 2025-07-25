@@ -1,5 +1,5 @@
 from typing import Optional
-from aicc.board import Board, NOBODY, get_goal_cells
+from aicc.board import Board
 
 class Game:
     def __init__(self, num_players: int):
@@ -35,9 +35,9 @@ class Game:
     def is_winner(self, player_no: int):
         has_player_pawn = False
         count_cells_filled = 0
-        goal_cells = get_goal_cells(player_no)
+        goal_cells = Board.get_goal_cells(player_no)
         for row, col in goal_cells:
-            if self.board.state[row, col] != NOBODY:
+            if self.board.state[row, col] != Board.NOBODY:
                 count_cells_filled += 1
             if self.board.state[row, col] == player_no:
                 has_player_pawn = True
@@ -48,10 +48,10 @@ if __name__ == "__main__":
     game = Game(2)
 
     print(game.is_winner(1))
-    for row, col in get_goal_cells(1):
+    for row, col in Board.get_goal_cells(1):
         game.board.state[row, col] = 1
     print(game.is_winner(1))
-    for row, col in get_goal_cells(1)[1:]:
+    for row, col in Board.get_goal_cells(1)[1:]:
         game.board.state[row, col] = 2
     print(game.is_winner(1))
     print(game.board.dumps())
