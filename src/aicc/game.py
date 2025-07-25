@@ -1,9 +1,6 @@
 from typing import Optional
 from aicc.board import Board, NOBODY, get_goal_cells
 
-import sys
-sys.exit()
-
 class Game:
     def __init__(self, num_players: int):
         self.board: Board = Board(skip_init=True)
