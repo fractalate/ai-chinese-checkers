@@ -1,6 +1,5 @@
 from typing import Optional
 from aicc.board import Board, NOBODY, get_goal_cells
-import trainer.test
 
 import sys
 sys.exit()
