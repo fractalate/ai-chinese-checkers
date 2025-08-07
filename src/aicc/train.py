@@ -1,4 +1,4 @@
-from aicc.neural_network import NeuralNetwork, choose_best_move
+from aicc.neural_network import NeuralNetwork, choose_best_move_plus
 from aicc.board import Board
 from aicc.game import Game
 
@@ -33,13 +33,24 @@ def score_game(game: Game, player_no: int) -> float:
 
 
 def play_match(model_1: NeuralNetwork, model_2: NeuralNetwork) -> Game:
+    def score_function(
+        game: Game,
+        from_row: int,
+        from_col: int,
+        from_cell_score: float,
+        to_row: int,
+        to_col: int,
+        to_cell_score: float,
+    ):
+        return score_game(game, game.player_up) + from_cell_score + to_cell_score
+
     game = Game(num_players=2)
 
     player_no = 1
     models = [None, model_1, model_2]
 
-    while not game.is_winner(game.player_up) and game.turn_no < 100:
-        move = choose_best_move(models[player_no], game)
+    while not game.is_winner(game.player_up) and game.turn_no < 150:
+        move = choose_best_move_plus(models[player_no], game, score_function)
         if not move:
             game.advance_turn()
         else:
