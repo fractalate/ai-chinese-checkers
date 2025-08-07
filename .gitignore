@@ -1,6 +1,8 @@
 # python support
+*.egg-info/
 __pycahce__/
 *.pyc
+/venv/
 
 # output
 /out/
