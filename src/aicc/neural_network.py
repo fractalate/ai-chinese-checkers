@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, TypeAlias
 import torch
 import torch.nn as nn
 
@@ -142,7 +142,23 @@ def choose_best_move(model: NeuralNetwork, game: Game) -> Optional[Tuple[Tuple[i
     return best_action
 
 
-def choose_best_move_plus(model: NeuralNetwork, game: Game, score_function: Callable) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+"""
+def score_function(
+    game: Game,
+    from_row: int,
+    from_col: int,
+    from_cell_score: float,
+    to_row: int,
+    to_col: int,
+    to_cell_score: float,
+):
+    return 0.0
+"""
+ScoreFunction: TypeAlias = Callable[[Game, int, int, float, int, int, float], float]
+
+
+# TODO maybe a full type for the score_function
+def choose_best_move_plus(model: NeuralNetwork, game: Game, score_function: ScoreFunction) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
     input_vector = game_state_to_input_vector(game, game.player_up)
 
     actions = model(input_vector)
@@ -155,7 +171,6 @@ def choose_best_move_plus(model: NeuralNetwork, game: Game, score_function: Call
         for to_cell in range(NUMBER_OF_CELLS):
             from_cell_score = actions[from_cell]
             to_cell_score = actions[NUMBER_OF_CELLS + to_cell]
-            # We choose to score moves by the sum of their from and to cell scores.
             from_row_col = ROW_COL_BY_CELL[model_pov_to_objective_pov(game.player_up, from_cell)]
             to_row_col = ROW_COL_BY_CELL[model_pov_to_objective_pov(game.player_up, to_cell)]
             if game.is_valid_move(*from_row_col, *to_row_col):

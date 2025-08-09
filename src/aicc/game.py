@@ -42,21 +42,3 @@ class Game:
             if self.board.state[row, col] == player_no:
                 has_player_pawn = True
         return has_player_pawn and count_cells_filled == len(goal_cells)
-
-
-if __name__ == "__main__":
-    game = Game(2)
-
-    print(game.is_winner(1))
-    for row, col in Board.get_goal_cells(1):
-        game.board.state[row, col] = 1
-    print(game.is_winner(1))
-    for row, col in Board.get_goal_cells(1)[1:]:
-        game.board.state[row, col] = 2
-    print(game.is_winner(1))
-    print(game.board.dumps())
-
-    out_moves = []
-    game.board.state[5, 4] = 1
-    print(game.board.is_valid_move(2, 4, 6, 4, out_moves=out_moves))
-    print(out_moves)

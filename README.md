@@ -26,5 +26,5 @@ pip install --editable .
 Run some sample programs:
 
 ```bash
-python3 -m aicc.train
+python3 -m trainer.bin.play_match
 ```
