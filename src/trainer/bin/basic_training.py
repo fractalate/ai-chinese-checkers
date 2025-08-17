@@ -95,8 +95,7 @@ if __name__ == "__main__":
         to_col: int,
         to_cell_score: float,
     ):
-        opponent = get_opposition_player_no(game.player_up)
-        return score_game(game, game.player_up) - score_game(game, opponent) / 2.0 + from_cell_score + to_cell_score
+        return score_game(game, game.player_up) + from_cell_score + to_cell_score
 
     model_descriptors = [ModelDescriptor(NeuralNetwork()) for _ in range(NUMBER_OF_MODELS)]
     while True:

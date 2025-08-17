@@ -149,14 +149,16 @@ class Board:
             result.append("".join(line))
         return "\n".join(result)
 
+    def get_goal_cells(player_no: int) -> List[int]:
+        return Board.get_home_cells(get_opposition_player_no(player_no))
+
     @functools.cache
     @staticmethod
-    def get_goal_cells(player_no: int) -> List[int]:
-        opposition = get_opposition_player_no(player_no)
+    def get_home_cells(player_no: int) -> List[int]:
         results = []
         for row in range(Board.GRID_DIM):
             for col in range(Board.GRID_DIM):
-                if _BOARD_6[row, col] == opposition:
+                if _BOARD_6[row, col] == player_no:
                     results.append((row, col))
         return results
 
