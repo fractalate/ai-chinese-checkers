@@ -50,3 +50,5 @@ def play_match(model_1: NeuralNetwork, model_2: NeuralNetwork, score_function: S
         print('player 1:', score_game(game, 1))
         print('player 2:', score_game(game, 2))
         print()
+
+    return game
