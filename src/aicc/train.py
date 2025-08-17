@@ -12,6 +12,7 @@ def score_game(game: Game, player_no: int) -> float:
     if player_no not in [1, 2]:
         raise NotImplementedError(f"Player {player_no} is not supported.")
 
+    opposition_player_no = get_opposition_player_no(player_no)
     total = 0.0
 
     winner = game.get_winner()
@@ -40,7 +41,7 @@ def score_game(game: Game, player_no: int) -> float:
                 if (row, col) in goal:
                     total += 20.0
 
-            else:
+            elif cell == opposition_player_no:
                 # Punish for opposing pieces close to home zone.
                 if player_no == 1:
                     total -= Board.GRID_DIM - row - 1
